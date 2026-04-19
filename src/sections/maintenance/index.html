@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Website Under Maintenance</title>
+    <style>
+        :root {
+            --bg1: #f6f8fa;
+            --bg2: #e9eef0;
+            --card-bg: rgba(255, 255, 255, 0.85);
+            --overlay: rgba(8, 29, 27, 0.6);
+            /* user's preferred overlay color */
+            --accent: #0ea5a4;
+            --max-width: 1500px;
+            --gap: 24px;
+            --radius: 18px;
+            --shadow: 0 10px 30px rgba(8, 29, 27, 0.12);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, var(--bg1), var(--bg2));
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            padding: 0;
+        }
+
+        .card {
+            width: 100%;
+            max-width: var(--max-width);
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: visible;
+            display: flex;
+            gap: 40px;
+            align-items: center;
+            justify-content: center;
+            padding: 28px;
+            position: relative;
+        }
+
+        /* Left: image box */
+        .illustration {
+            flex: 0 0 520px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            min-height: 220px;
+        }
+
+        .illustration img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 12px;
+            box-shadow: 0 6px 18px rgba(8, 29, 27, 0.08);
+        }
+
+        /* Right: text */
+        .content {
+            flex: 1 1 420px;
+            padding: 8px 4px;
+            color: #052423;
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            letter-spacing: -0.02em;
+        }
+
+        p.lead {
+            margin: 0 0 18px 0;
+            color: #375953;
+            line-height: 1.45;
+        }
+
+        .meta {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn {
+            appearance: none;
+            border: 0;
+            background: var(--accent);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 6px 18px rgba(14, 165, 164, 0.18);
+        }
+
+        .small {
+            font-size: 13px;
+            color: #3f6b66;
+            background: transparent;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(8, 29, 27, 0.06);
+        }
+
+        footer.note {
+            margin-top: 18px;
+            font-size: 13px;
+            color: #27504b;
+        }
+
+        /* Responsive */
+        @media (max-width:880px) {
+            .card {
+                flex-direction: column;
+                padding: 18px;
+            }
+
+            .illustration {
+                flex-basis: 100%;
+            }
+
+            .content {
+                width: 100%;
+                text-align: center
+            }
+
+            .meta {
+                justify-content: center
+            }
+
+            h1 {
+                font-size: 24px
+            }
+        }
+
+        /* Small visual accent overlay behind the image */
+        .illustration::after {
+            content: "";
+            position: absolute;
+            inset: auto 18px 18px auto;
+            width: 120px;
+            height: 120px;
+            background: var(--overlay);
+            border-radius: 14px;
+            transform: rotate(-12deg);
+            z-index: -1;
+            opacity: 0.85;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="card" role="main" aria-labelledby="maint-title">
+        <div class="illustration" aria-hidden="true">
+            <!-- Put the file `WEBSITE UNDER MAINTENANCE.jpg` in the same folder as this HTML -->
+            <img src="WEBSITE UNDER MAINTENANCE.jpg" alt="Website Under Maintenance" />
+        </div>
+
+        <div class="content">
+            <h1 id="maint-title">We'll be back soon</h1>
+            <p class="lead">Thanks for your patience — we're performing some maintenance to improve the site. If you
+                need immediate assistance, contact support or try again later.</p>
+
+            <div class="meta">
+                <button class="btn" onclick="location.reload()">Refresh</button>
+                <button class="small" onclick="window.location.href='mailto:support@example.com'">Contact
+                    Support</button>
+            </div>
+
+            <footer class="note">Estimated downtime: ~15–30 minutes. Thanks for understanding.</footer>
+        </div>
+    </main>
+</body>
+
+</html>
