@@ -1,0 +1,16 @@
+# File: /public_html/.htaccess
+
+RewriteEngine On
+
+# If the request is for a file that exists in /dist, serve it from /dist
+RewriteCond %{DOCUMENT_ROOT}/dist%{REQUEST_URI} -f
+RewriteRule ^(.*)$ /dist/$1 [L]
+
+# If the request is for a directory that exists in /dist, serve it from /dist
+RewriteCond %{DOCUMENT_ROOT}/dist%{REQUEST_URI} -d
+RewriteRule ^(.*)$ /dist/$1 [L]
+
+# For everything else, serve index.html from /dist (SPA fallback)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ /dist/index.html [L]
