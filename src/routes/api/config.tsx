@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 // Base URL configuration
+// const API_BASE_URL = 'http://localhost:8000/api';
 const API_BASE_URL = 'https://sms-api.schoolmanagerph.com/api';
 
 // Calculate APP_BASE_URL by removing '/api' from API_BASE_URL
