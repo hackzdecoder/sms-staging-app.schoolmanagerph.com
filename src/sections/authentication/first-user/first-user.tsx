@@ -6,12 +6,9 @@ import {
   TextField,
   IconButton,
   Typography,
-  InputAdornment,
   CircularProgress,
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
   Checkbox,
   FormControlLabel,
   Stack,
@@ -20,13 +17,10 @@ import { useMediaQuery, useTheme } from '@mui/material';
 import { useRouter } from 'src/routes/hooks';
 import { Iconify } from 'src/components/iconify';
 import { api } from 'src/routes/api/config';
-import {
-  TermsConditionsModal,
-  useTermsConditionsModal,
-  TERMS_CONTENT,
-} from 'src/utils/modal-terms-conditions';
+import axios from 'axios';
+import { useTermsConditionsModal, TERMS_CONTENT } from 'src/utils/modal-terms-conditions';
 import { Logo } from 'src/components/logo';
-import { OtpView } from '../otp/otp-auth'; // Import OTP component
+import { OtpView } from '../otp/otp-auth';
 
 // -------------------- API Response Type --------------------
 interface FirstUserApiResponse {
@@ -39,7 +33,7 @@ interface FirstUserApiResponse {
 // Interface for token validation response
 interface TokenValidationResponse {
   success: boolean;
-  token?: string; // ✅ ADDED: Token property
+  token?: string;
   message?: string;
   expires_in?: number;
 }
@@ -54,9 +48,22 @@ interface OtpResponse {
     email_hint?: string;
     reset_token?: string;
     first_user_token?: string;
-    first_user_token_expiry_at?: string; // ✅ ADD THIS
+    first_user_token_expiry_at?: string;
   };
 }
+
+// Interface for email pre-fill response
+interface UserEmailResponse {
+  success: boolean;
+  data?: {
+    email: string;
+    has_email: boolean;
+  };
+  message?: string;
+}
+
+// Fix: Use ReturnType for timer
+type TimerType = ReturnType<typeof setInterval> | null;
 
 // ----------------------------------------------------------------------
 export function FirstUserView() {
@@ -64,16 +71,12 @@ export function FirstUserView() {
 
   // -------------------- State --------------------
   const [form, setForm] = useState({
-    username: '', // ✅ This will store the actual username for backend
-    fullname: '', // ✅ This will store the full name for display
+    username: '',
+    fullname: '',
     email: '',
-    password: '',
-    confirmPassword: '',
-    first_user_token: '', // Will be populated AFTER OTP verification
+    first_user_token: '',
   });
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isValidatingToken, setIsValidatingToken] = useState(true);
@@ -83,7 +86,6 @@ export function FirstUserView() {
   // New OTP verification states
   const [showOtpVerification, setShowOtpVerification] = useState(false);
   const [otpVerified, setOtpVerified] = useState(() => {
-    // Check localStorage for persisted OTP verification status
     const persistedOtpVerified = localStorage.getItem('first_user_otp_verified');
     return persistedOtpVerified === 'true';
   });
@@ -94,16 +96,19 @@ export function FirstUserView() {
   // Countdown timer state
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isExpired, setIsExpired] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<TimerType>(null);
 
   // State for terms checkboxes
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [acceptableUseAccepted, setAcceptableUseAccepted] = useState(false);
   const [privacyPolicyAccepted, setPrivacyPolicyAccepted] = useState(false);
 
-  // ✅ ADDED: OTP Success Dialog State
+  // OTP Success Dialog State
   const [otpSuccessDialog, setOtpSuccessDialog] = useState(false);
   const [otpSuccessMessage, setOtpSuccessMessage] = useState('');
+
+  // Ref to prevent multiple email fetch requests
+  const hasFetchedEmailRef = useRef(false);
 
   // Use the modal hook
   const { openModal, closeModal, ModalComponent } = useTermsConditionsModal();
@@ -192,6 +197,29 @@ export function FirstUserView() {
     [isLoading, isExpired, otpVerified]
   );
 
+  // -------------------- Pre-fill Email Function --------------------
+  const prefillUserEmail = useCallback(async (username: string) => {
+    // Prevent multiple API calls
+    if (hasFetchedEmailRef.current) return;
+
+    try {
+      const response = await axios.get<UserEmailResponse>('/get-user-email', {
+        baseURL: 'http://localhost:8001/api',
+        params: { username },
+      });
+
+      if (response.data.success && response.data.data?.has_email) {
+        const existingEmail = response.data.data.email;
+        setForm((prev) => ({ ...prev, email: existingEmail }));
+        setOtpVerificationEmail(existingEmail);
+        localStorage.setItem('first_user_email', existingEmail);
+      }
+      hasFetchedEmailRef.current = true;
+    } catch (error) {
+      console.error('Failed to fetch user email:', error);
+    }
+  }, []);
+
   // -------------------- OTP Verification Functions --------------------
   const handleSendOtp = useCallback(async () => {
     // Reset timer state when starting OTP flow
@@ -218,7 +246,7 @@ export function FirstUserView() {
 
     setIsSendingOtp(true);
     setErrors({});
-    setOtpSuccessMessage(''); // Clear previous success message
+    setOtpSuccessMessage('');
 
     try {
       // Send OTP to the email
@@ -232,13 +260,9 @@ export function FirstUserView() {
       );
 
       if (response.data.success) {
-        // Store email for OTP verification
         setOtpVerificationEmail(form.email);
-
-        // ✅ SAVE EMAIL TO localStorage FOR PERSISTENCE
         localStorage.setItem('first_user_email', form.email);
 
-        // ✅ SHOW SUCCESS DIALOG WITH EMAIL HINT
         const emailHint =
           response.data.data?.email_hint ||
           (form.email
@@ -246,16 +270,6 @@ export function FirstUserView() {
             : 'your email');
         setOtpSuccessMessage(`Check ${emailHint} for the OTP.`);
         setOtpSuccessDialog(true);
-
-        // ❌ REMOVE THIS: DO NOT store token from send-otp response
-        // Token and expiry should ONLY come from verify-otp response
-        // if (response.data.data?.first_user_token) {
-        //   localStorage.setItem('first_user_token', response.data.data.first_user_token);
-        //   setForm((prev) => ({
-        //     ...prev,
-        //     first_user_token: response.data.data?.first_user_token || '',
-        //   }));
-        // }
       } else {
         setErrors({ email: response.data.message || 'Failed to send OTP' });
       }
@@ -270,10 +284,7 @@ export function FirstUserView() {
 
   const handleOtpVerified = useCallback(
     async (token?: string, expiry?: string) => {
-      console.log('OTP Verified, token:', token, 'expiry:', expiry);
-
       if (!token) {
-        // OTP verification failed
         setErrors({ submit: 'OTP verification failed. Please try again.' });
         setShowOtpVerification(false);
         setIsStartingCountdown(false);
@@ -287,40 +298,30 @@ export function FirstUserView() {
       setIsStartingCountdown(true);
 
       try {
-        // ✅ Store the token we received from OTP verification
         localStorage.setItem('first_user_token', token);
         setForm((prev) => ({ ...prev, first_user_token: token }));
 
-        // ✅ Store the expiry from verify-otp response
         if (expiry) {
           localStorage.setItem('first_user_token_expiry_at', expiry);
-          console.log('✅ Stored first_user_token_expiry_at:', expiry);
         } else {
           console.warn('⚠️ No expiry received from verify-otp response');
-          // If no expiry from backend, create a default one (15 minutes from now)
           const defaultExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
           localStorage.setItem('first_user_token_expiry_at', defaultExpiry);
-          console.log('📅 Created default expiry:', defaultExpiry);
         }
 
-        // ✅ Calculate remaining time from expiry
         const savedExpiry = localStorage.getItem('first_user_token_expiry_at');
-        let remainingSeconds = 15 * 60; // Default 15 minutes
+        let remainingSeconds = 15 * 60;
 
         if (savedExpiry) {
           const expiryDate = new Date(savedExpiry);
           const now = new Date();
           const diff = expiryDate.getTime() - now.getTime();
           remainingSeconds = Math.max(0, Math.ceil(diff / 1000));
-          console.log('⏰ Calculated remaining seconds from expiry:', remainingSeconds);
         }
-
-        console.log('🚀 Starting countdown with:', remainingSeconds, 'seconds');
         startCountdown(remainingSeconds);
         setShowCountdown(true);
       } catch (error) {
-        console.error('❌ Failed to start countdown:', error);
-        // Fallback
+        console.error('Failed to start countdown:', error);
         startCountdown(15 * 60);
         setShowCountdown(true);
       } finally {
@@ -330,7 +331,7 @@ export function FirstUserView() {
     [startCountdown]
   );
 
-  // Also update the Token Validation on Mount to use the expiry:
+  // Token Validation on Mount with Pre-fill Email
   useEffect(() => {
     const validateToken = async () => {
       const username = localStorage.getItem('first_user_username');
@@ -348,6 +349,11 @@ export function FirstUserView() {
         fullname: fullname || username,
       }));
 
+      // ✅ Pre-fill email if exists (only once)
+      if (username && !hasFetchedEmailRef.current) {
+        await prefillUserEmail(username);
+      }
+
       if (otpVerifiedPersisted) {
         setOtpVerified(true);
         const savedEmail = localStorage.getItem('first_user_email');
@@ -356,7 +362,6 @@ export function FirstUserView() {
           setOtpVerificationEmail(savedEmail);
         }
 
-        // Check if we have token and expiry from OTP verification
         const savedToken = localStorage.getItem('first_user_token');
         const savedExpiry = localStorage.getItem('first_user_token_expiry_at');
 
@@ -370,26 +375,18 @@ export function FirstUserView() {
             const remainingSeconds = Math.max(0, Math.ceil(diff / 1000));
 
             if (remainingSeconds > 0) {
-              console.log('🔄 Resuming countdown with', remainingSeconds, 'seconds left');
               startCountdown(remainingSeconds);
               setShowCountdown(true);
             } else {
-              // Token expired
-              console.log('⌛ Token expired at:', savedExpiry);
               setIsExpired(true);
-              // Clear expired token
               localStorage.removeItem('first_user_token');
               localStorage.removeItem('first_user_token_expiry_at');
             }
           } else {
-            // No expiry stored, use default
-            console.log('🔄 No expiry found, using default 15 minutes');
             startCountdown(15 * 60);
             setShowCountdown(true);
           }
         } else {
-          console.log('⚠️ No token found, user needs to restart OTP flow');
-          // User needs to restart OTP verification
           setOtpVerified(false);
           localStorage.removeItem('first_user_otp_verified');
         }
@@ -400,70 +397,32 @@ export function FirstUserView() {
 
     validateToken();
 
-    // Cleanup timer on unmount
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
     };
-  }, [router, startCountdown]);
+  }, [router, startCountdown, prefillUserEmail]);
 
-  // ✅ ADDED: OTP Success Dialog Handler
+  // OTP Success Dialog Handler
   const handleOtpSuccessDialogOk = useCallback(() => {
     setOtpSuccessDialog(false);
-    // Show OTP verification screen after user clicks OK
     setShowOtpVerification(true);
   }, []);
-
-  const handleBackFromOtp = useCallback(() => {
-    setShowOtpVerification(false);
-    setErrors({});
-
-    // Also reset timer state if user goes back from OTP screen
-    setTimeLeft(0);
-    setShowCountdown(false);
-  }, []);
-
-  // SIMPLIFY startCountdownAfterOtp - Remove token fetching logic
-  const startCountdownAfterOtp = useCallback(async () => {
-    try {
-      // ✅ SIMPLIFIED: Just start the countdown
-      console.log('Starting default 15-minute countdown');
-      startCountdown(15 * 60);
-      setShowCountdown(true);
-    } catch (error) {
-      console.error('Error in startCountdownAfterOtp:', error);
-      // Start countdown anyway as fallback
-      startCountdown(15 * 60);
-      setShowCountdown(true);
-    }
-  }, [startCountdown]);
 
   // -------------------- Validation --------------------
   const validateAllFields = useCallback(() => {
     const newErrors: { [key: string]: string } = {};
-    const { username, fullname, email, password, confirmPassword } = form;
+    const { username, fullname, email } = form;
 
-    // ✅ Validate username (for backend)
     if (!username.trim()) newErrors.username = 'Username is required';
-
-    // ✅ Validate fullname (for UI)
     if (!fullname.trim()) newErrors.fullname = 'Fullname is required';
     else if (fullname.trim().length < 3) newErrors.fullname = 'Must be at least 3 characters';
 
     if (!email.trim()) newErrors.email = 'Email is required';
     else if (!emailRegex.test(email.trim())) newErrors.email = 'Invalid email address';
 
-    if (!password) newErrors.password = 'Password is required';
-    else if (password.length < 8) newErrors.password = 'Min 8 characters';
-    else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password))
-      newErrors.password = 'Must contain upper, lower, and numbers';
-
-    if (!confirmPassword) newErrors.confirmPassword = 'Please confirm your password';
-    else if (confirmPassword !== password) newErrors.confirmPassword = 'Passwords do not match';
-
-    // Check if all terms are accepted
     if (!termsAccepted) newErrors.terms = 'You must accept the Terms & Conditions';
     if (!acceptableUseAccepted)
       newErrors.acceptableUse = 'You must accept the Acceptable Use Policy';
@@ -475,19 +434,16 @@ export function FirstUserView() {
 
   // -------------------- Submit --------------------
   const handleSubmit = useCallback(async () => {
-    // Check if session expired
     if (isExpired) {
       setErrors({ submit: 'Session has expired. Please login again.' });
       return;
     }
 
-    // Check if OTP is verified
     if (!otpVerified) {
       setErrors({ submit: 'Please verify your email with OTP first.' });
       return;
     }
 
-    // Check if token exists (should exist after OTP verification)
     if (!form.first_user_token) {
       setErrors({ submit: 'Session token missing. Please restart the process.' });
       return;
@@ -500,27 +456,24 @@ export function FirstUserView() {
     setIsLoading(true);
 
     try {
-      // ✅ Send username WITH token (token was generated AFTER OTP verification)
       const response = await api.post<FirstUserApiResponse>(
         '/update-first-user',
         {
           username: form.username,
           email: form.email,
-          password: form.password,
-          first_user_token: form.first_user_token, // ✅ Token generated AFTER OTP
+          first_user_token: form.first_user_token,
+          // password intentionally omitted - will be set later in ProfileContent
         },
         { skipAuthInterceptor: true } as any
       );
 
       if (response.data.success) {
-        // Clear first-user session data after successful update
         localStorage.removeItem('first_user_username');
         localStorage.removeItem('first_user_fullname');
         localStorage.removeItem('first_user_otp_verified');
         localStorage.removeItem('first_user_email');
         localStorage.removeItem('first_user_token');
 
-        // Stop countdown timer
         if (timerRef.current) {
           clearInterval(timerRef.current);
           timerRef.current = null;
@@ -535,7 +488,6 @@ export function FirstUserView() {
       }
     } catch (error: any) {
       if (error.response?.status === 410) {
-        // Token expired
         localStorage.removeItem('first_user_username');
         localStorage.removeItem('first_user_fullname');
         localStorage.removeItem('first_user_otp_verified');
@@ -545,7 +497,6 @@ export function FirstUserView() {
         setErrors({ submit: 'Session has expired. Please login again.' });
         return;
       } else if (error.response?.status === 401) {
-        // Invalid token
         localStorage.removeItem('first_user_username');
         localStorage.removeItem('first_user_fullname');
         localStorage.removeItem('first_user_otp_verified');
@@ -722,7 +673,6 @@ export function FirstUserView() {
         overflow: 'hidden',
       }}
     >
-      {/* Scrollable container wrapper */}
       <Box
         sx={{
           width: '100%',
@@ -746,7 +696,6 @@ export function FirstUserView() {
             my: 'auto',
           }}
         >
-          {/* HEADER */}
           <Box
             sx={{
               display: 'flex',
@@ -758,7 +707,6 @@ export function FirstUserView() {
             <Logo sx={{ alignItems: 'center', justifyContent: 'center' }} />
           </Box>
 
-          {/* TITLE */}
           <Typography
             variant="h5"
             sx={{
@@ -775,13 +723,11 @@ export function FirstUserView() {
             sx={{ textAlign: 'center', mb: { xs: 1, sm: 2.2 }, color: 'text.secondary' }}
           >
             {otpVerified
-              ? 'Please update your email and password to continue.'
+              ? 'Please update your email to continue.'
               : 'Enter your email address to receive a verification code.'}
           </Typography>
 
-          {/* FORM */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, sm: 2.5 } }}>
-            {/* Fullname (display only) */}
             <TextField
               fullWidth
               label="Fullname"
@@ -795,7 +741,6 @@ export function FirstUserView() {
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.2 } }}
             />
 
-            {/* Email */}
             <TextField
               fullWidth
               label="Email Address"
@@ -810,7 +755,6 @@ export function FirstUserView() {
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.2 } }}
             />
 
-            {/* OTP Verification Status */}
             {otpVerified && (
               <Box
                 sx={{
@@ -830,182 +774,115 @@ export function FirstUserView() {
               </Box>
             )}
 
-            {/* Show password fields and terms only after OTP verification */}
             {otpVerified && (
-              <>
-                {/* Password */}
-                <TextField
-                  fullWidth
-                  label="New Password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={form.password}
-                  onChange={handleChange('password')}
-                  onKeyPress={handleKeyPress}
-                  error={!!errors.password}
-                  helperText={errors.password}
-                  disabled={isLoading || isExpired}
-                  size={isMobile ? 'small' : 'medium'}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => setShowPassword(!showPassword)}
-                          size="small"
-                          disabled={isLoading || isExpired}
-                        >
-                          <Iconify
-                            icon={showPassword ? 'solar:eye-bold' : 'solar:eye-closed-bold'}
-                            width={20}
-                          />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.2 } }}
+              <Stack spacing={0.5} sx={{ mt: -0.7 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      color="primary"
+                      size="small"
+                      sx={{ mb: -1 }}
+                      disabled={isLoading || isExpired}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2" sx={{ mb: -1 }}>
+                      I AGREE to the{' '}
+                      <Box
+                        component="span"
+                        onClick={handleOpenTermsModal}
+                        sx={{
+                          fontWeight: 600,
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          '&:hover': { textDecoration: 'underline' },
+                        }}
+                      >
+                        Terms & Conditions
+                      </Box>
+                    </Typography>
+                  }
                 />
+                {errors.terms && (
+                  <Typography color="error" variant="caption">
+                    {errors.terms}
+                  </Typography>
+                )}
 
-                {/* Confirm Password */}
-                <TextField
-                  fullWidth
-                  label="Confirm New Password"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={form.confirmPassword}
-                  onChange={handleChange('confirmPassword')}
-                  onKeyPress={handleKeyPress}
-                  error={!!errors.confirmPassword}
-                  helperText={errors.confirmPassword}
-                  disabled={isLoading || isExpired}
-                  size={isMobile ? 'small' : 'medium'}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          size="small"
-                          disabled={isLoading || isExpired}
-                        >
-                          <Iconify
-                            icon={showConfirmPassword ? 'solar:eye-bold' : 'solar:eye-closed-bold'}
-                            width={20}
-                          />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.2 } }}
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={acceptableUseAccepted}
+                      onChange={(e) => setAcceptableUseAccepted(e.target.checked)}
+                      color="primary"
+                      size="small"
+                      sx={{ mb: -1 }}
+                      disabled={isLoading || isExpired}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2" sx={{ mb: -1 }}>
+                      I AGREE to the{' '}
+                      <Box
+                        component="span"
+                        onClick={handleOpenAcceptableUseModal}
+                        sx={{
+                          fontWeight: 600,
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          '&:hover': { textDecoration: 'underline' },
+                        }}
+                      >
+                        Acceptable Use Policy
+                      </Box>
+                    </Typography>
+                  }
                 />
+                {errors.acceptableUse && (
+                  <Typography color="error" variant="caption">
+                    {errors.acceptableUse}
+                  </Typography>
+                )}
 
-                {/* Terms & Conditions Checkboxes */}
-                <Stack spacing={0.5} sx={{ mt: -0.7 }}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={termsAccepted}
-                        onChange={(e) => setTermsAccepted(e.target.checked)}
-                        color="primary"
-                        size="small"
-                        sx={{ mb: -1 }}
-                        disabled={isLoading || isExpired}
-                      />
-                    }
-                    label={
-                      <Typography variant="body2" sx={{ mb: -1 }}>
-                        I AGREE to the{' '}
-                        <Box
-                          component="span"
-                          onClick={handleOpenTermsModal}
-                          sx={{
-                            fontWeight: 600,
-                            color: 'primary.main',
-                            cursor: 'pointer',
-                            '&:hover': { textDecoration: 'underline' },
-                          }}
-                        >
-                          Terms & Conditions
-                        </Box>
-                      </Typography>
-                    }
-                  />
-                  {errors.terms && (
-                    <Typography color="error" variant="caption">
-                      {errors.terms}
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={privacyPolicyAccepted}
+                      onChange={(e) => setPrivacyPolicyAccepted(e.target.checked)}
+                      color="primary"
+                      size="small"
+                      sx={{ mb: -1 }}
+                      disabled={isLoading || isExpired}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2" sx={{ mb: -1 }}>
+                      I ACCEPT the{' '}
+                      <Box
+                        component="span"
+                        onClick={handleOpenPrivacyPolicyModal}
+                        sx={{
+                          fontWeight: 600,
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          '&:hover': { textDecoration: 'underline' },
+                        }}
+                      >
+                        Privacy Policy
+                      </Box>
                     </Typography>
-                  )}
-
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={acceptableUseAccepted}
-                        onChange={(e) => setAcceptableUseAccepted(e.target.checked)}
-                        color="primary"
-                        size="small"
-                        sx={{ mb: -1 }}
-                        disabled={isLoading || isExpired}
-                      />
-                    }
-                    label={
-                      <Typography variant="body2" sx={{ mb: -1 }}>
-                        I AGREE to the{' '}
-                        <Box
-                          component="span"
-                          onClick={handleOpenAcceptableUseModal}
-                          sx={{
-                            fontWeight: 600,
-                            color: 'primary.main',
-                            cursor: 'pointer',
-                            '&:hover': { textDecoration: 'underline' },
-                          }}
-                        >
-                          Acceptable Use Policy
-                        </Box>
-                      </Typography>
-                    }
-                  />
-                  {errors.acceptableUse && (
-                    <Typography color="error" variant="caption">
-                      {errors.acceptableUse}
-                    </Typography>
-                  )}
-
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={privacyPolicyAccepted}
-                        onChange={(e) => setPrivacyPolicyAccepted(e.target.checked)}
-                        color="primary"
-                        size="small"
-                        sx={{ mb: -1 }}
-                        disabled={isLoading || isExpired}
-                      />
-                    }
-                    label={
-                      <Typography variant="body2" sx={{ mb: -1 }}>
-                        I ACCEPT the{' '}
-                        <Box
-                          component="span"
-                          onClick={handleOpenPrivacyPolicyModal}
-                          sx={{
-                            fontWeight: 600,
-                            color: 'primary.main',
-                            cursor: 'pointer',
-                            '&:hover': { textDecoration: 'underline' },
-                          }}
-                        >
-                          Privacy Policy
-                        </Box>
-                      </Typography>
-                    }
-                  />
-                  {errors.privacyPolicy && (
-                    <Typography color="error" variant="caption">
-                      {errors.privacyPolicy}
-                    </Typography>
-                  )}
-                </Stack>
-              </>
+                  }
+                />
+                {errors.privacyPolicy && (
+                  <Typography color="error" variant="caption">
+                    {errors.privacyPolicy}
+                  </Typography>
+                )}
+              </Stack>
             )}
 
-            {/* Submit Errors */}
             {errors.submit && (
               <Typography
                 color="error"
@@ -1021,7 +898,6 @@ export function FirstUserView() {
               </Typography>
             )}
 
-            {/* Loader while starting countdown after OTP verification */}
             {isStartingCountdown && (
               <Box
                 sx={{
@@ -1039,7 +915,6 @@ export function FirstUserView() {
               </Box>
             )}
 
-            {/* Action Button */}
             <Button
               fullWidth
               variant="contained"
@@ -1076,7 +951,6 @@ export function FirstUserView() {
                         : 'Send OTP'}
             </Button>
 
-            {/* ✅ COUNTDOWN TIMER - Only show AFTER OTP verification AND when showCountdown is true */}
             {showCountdown && otpVerified && timeLeft > 0 && !isExpired && (
               <Box
                 sx={{
@@ -1103,7 +977,6 @@ export function FirstUserView() {
               </Box>
             )}
 
-            {/* Back to Login */}
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.3 }}>
               <Link
                 variant="body2"
@@ -1117,7 +990,6 @@ export function FirstUserView() {
                 }}
                 onClick={() => {
                   if (!isLoading && !isExpired) {
-                    // Clear all session data before redirecting
                     localStorage.removeItem('first_user_username');
                     localStorage.removeItem('first_user_fullname');
                     localStorage.removeItem('first_user_otp_verified');
@@ -1134,10 +1006,9 @@ export function FirstUserView() {
         </Box>
       </Box>
 
-      {/* Render the Terms & Conditions Modal */}
       <ModalComponent />
 
-      {/* ✅ ADDED: OTP SUCCESS DIALOG */}
+      {/* OTP SUCCESS DIALOG */}
       <Dialog
         open={otpSuccessDialog}
         onClose={() => {}}
@@ -1153,7 +1024,6 @@ export function FirstUserView() {
         }}
       >
         <Box sx={{ textAlign: 'center' }}>
-          {/* Inline check SVG */}
           <Box
             sx={{
               width: 68,
@@ -1218,7 +1088,6 @@ export function FirstUserView() {
           },
         }}
       >
-        {/* Header - Blue background */}
         <Box
           sx={{
             bgcolor: 'primary.main',
@@ -1243,7 +1112,6 @@ export function FirstUserView() {
           </IconButton>
         </Box>
 
-        {/* Content */}
         <DialogContent sx={{ p: 3 }}>
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: 'primary.dark' }}>
@@ -1278,7 +1146,6 @@ export function FirstUserView() {
           </Box>
         </DialogContent>
 
-        {/* Footer */}
         <Box
           sx={{
             p: 2,
