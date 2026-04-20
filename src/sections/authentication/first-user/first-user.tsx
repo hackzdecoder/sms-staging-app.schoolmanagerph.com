@@ -749,7 +749,7 @@ export function FirstUserView() {
               onKeyPress={handleKeyPress}
               error={!!errors.email}
               helperText={errors.email}
-              disabled={isLoading || isExpired || otpVerified || isSendingOtp}
+              disabled
               size={isMobile ? 'small' : 'medium'}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.2 } }}
             />
