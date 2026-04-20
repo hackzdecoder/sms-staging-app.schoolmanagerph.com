@@ -203,8 +203,7 @@ export function FirstUserView() {
     if (hasFetchedEmailRef.current) return;
 
     try {
-      const response = await axios.get<UserEmailResponse>('/get-user-email', {
-        baseURL: 'http://localhost:8001/api',
+      const response = await api.get<UserEmailResponse>('/get-user-email', {
         params: { username },
       });
 
