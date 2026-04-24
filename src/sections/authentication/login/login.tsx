@@ -24,12 +24,12 @@ interface LoginResponse {
     full_name?: string;
     nickname?: string;
     name?: string;
+    school_code?: string;
   };
   redirect_to?: string;
   requires_email?: boolean;
   success?: boolean;
   message?: string;
-  // first_user_token?: string;
 }
 
 export function LoginView() {
@@ -43,16 +43,19 @@ export function LoginView() {
   const [touched, setTouched] = useState<{ [key: string]: boolean }>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  // If already logged in, redirect
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     if (token) {
       router.push('/dashboard');
     }
 
-    // NEW: Clear any first-user tokens when arriving at login page
+    // Clear all first-user data
     localStorage.removeItem('first_user_username');
+    localStorage.removeItem('first_user_fullname');
     localStorage.removeItem('first_user_token');
+    localStorage.removeItem('first_user_otp_verified');
+    localStorage.removeItem('first_user_email');
+    localStorage.removeItem('user_school_code');
   }, [router]);
 
   const validateAllFields = useCallback(() => {
@@ -79,56 +82,59 @@ export function LoginView() {
     [errors]
   );
 
-  // Update the handleSignIn function:
   const handleSignIn = useCallback(async () => {
     setTouched({ username: true, password: true });
     const validationErrors = validateAllFields();
     if (Object.keys(validationErrors).length > 0) return;
 
     setIsLoading(true);
-    setErrors({}); // clear previous submit errors
+    setErrors({});
     try {
-      const response = await api.post<LoginResponse>(
-        '/login',
-        { username, password },
-        { skipAuthInterceptor: true } as any
-      );
+      const response = await api.post<LoginResponse>('/login', { username, password }, {
+        skipAuthInterceptor: true,
+      } as any);
 
       if (response.data.success) {
-        // Save token if available
         if (response.data.token) {
           localStorage.setItem('auth_token', response.data.token);
         }
 
         if (response.data.user) {
           localStorage.setItem('user', JSON.stringify(response.data.user));
+
+          // ✅ Store school_code from login response
+          if (response.data.user.school_code) {
+            const schoolCode = response.data.user.school_code;
+            localStorage.setItem('user_school_code', schoolCode);
+            console.log('✅ Stored school_code:', schoolCode);
+          }
         }
 
-        // Redirect based on backend response
-        const redirectPath = response.data.redirect_to ?? '/dashboard';
+        // ✅ Clear all first-user data always
+        localStorage.removeItem('first_user_username');
+        localStorage.removeItem('first_user_fullname');
+        localStorage.removeItem('first_user_token');
+        localStorage.removeItem('first_user_otp_verified');
+        localStorage.removeItem('first_user_email');
 
-        // ✅ FIXED: Only store username and fullname for first-user flow
-        if (redirectPath === '/first-user') {
+        // ✅ Redirect based on requires_email flag
+        if (response.data.requires_email === true) {
+          // Store only for unverified users going to first-user
           localStorage.setItem('first_user_username', username);
-          
-          // Store full_name for display
           if (response.data.user?.full_name) {
             localStorage.setItem('first_user_fullname', response.data.user.full_name);
           } else {
-            localStorage.setItem('first_user_fullname', username); // Fallback
+            localStorage.setItem('first_user_fullname', username);
           }
-          
-          // ❌ DO NOT store first_user_token here
-          // Token will be generated AFTER OTP verification
+          router.push('/first-user');
+        } else {
+          router.push('/dashboard');
         }
-
-        router.push(redirectPath);
       } else {
         setErrors({ submit: response.data.message || 'Login failed.' });
       }
     } catch (error: any) {
-      const message =
-        error.response?.data?.message || 'Invalid username or password';
+      const message = error.response?.data?.message || 'Invalid username or password';
       setErrors({ submit: message });
     } finally {
       setIsLoading(false);
@@ -182,12 +188,10 @@ export function LoginView() {
           gap: 3,
         }}
       >
-        {/* Logo - Keep original size */}
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1, marginLeft: -6.5 }}>
           <Logo />
         </Box>
 
-        {/* Title */}
         <Typography
           variant="h5"
           sx={{
@@ -200,7 +204,6 @@ export function LoginView() {
           Login to your account
         </Typography>
 
-        {/* Form Fields */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <TextField
             fullWidth
@@ -243,7 +246,6 @@ export function LoginView() {
             size="medium"
           />
 
-          {/* Keep me signed in */}
           <FormControlLabel
             control={
               <Checkbox
@@ -261,7 +263,6 @@ export function LoginView() {
             sx={{ mt: -1 }}
           />
 
-          {/* Submit Error */}
           {errors.submit && (
             <Typography
               color="error"
@@ -277,7 +278,6 @@ export function LoginView() {
             </Typography>
           )}
 
-          {/* Login Button */}
           <Button
             fullWidth
             variant="contained"
@@ -294,7 +294,6 @@ export function LoginView() {
             {isLoading ? 'Signing in...' : 'Log in'}
           </Button>
 
-          {/* Forgot Password Link */}
           <Box sx={{ textAlign: 'center', pt: 1 }}>
             <Link
               variant="body2"
