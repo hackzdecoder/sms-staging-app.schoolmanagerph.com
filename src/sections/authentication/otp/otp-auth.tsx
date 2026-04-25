@@ -1,12 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  Box,
-  Link,
-  Button,
-  TextField,
-  Typography,
-  Dialog,
-} from '@mui/material';
+import { Box, Link, Button, TextField, Typography, Dialog } from '@mui/material';
 import { useRouter } from 'src/routes/hooks';
 import api from 'src/routes/api/config';
 import { Logo } from 'src/components/logo';
@@ -20,7 +13,7 @@ interface OtpResponse {
     email_hint?: string;
     reset_token?: string;
     first_user_token?: string;
-    first_user_token_expiry_at?: string; // ✅ ADD THIS
+    first_user_token_expiry_at?: string;
   };
 }
 
@@ -35,10 +28,11 @@ interface OtpSessionResponse {
 interface OtpViewProps {
   username: string;
   email?: string;
-  onOtpVerified?: (token?: string, expiry?: string) => void; // ✅ UPDATED: Accept expiry parameter
+  schoolCode?: string;
+  onOtpVerified?: (token?: string, expiry?: string) => void;
 }
 
-export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
+export function OtpView({ username, email, schoolCode, onOtpVerified }: OtpViewProps) {
   const router = useRouter();
   const [otp, setOtp] = useState(Array(6).fill(''));
   const [error, setError] = useState('');
@@ -51,46 +45,41 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
   const [showInvalidAccessDialog, setShowInvalidAccessDialog] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [otpExpiryTime, setOtpExpiryTime] = useState<Date | null>(null);
-  const [resetToken, setResetToken] = useState<string>(''); // ✅ FIXED: Declared resetToken
+  const [resetToken, setResetToken] = useState<string>('');
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** Parse MySQL datetime string to Date object */
   const parseMySQLDateTime = useCallback((mysqlDateTime: string): Date => {
     const isoString = mysqlDateTime.replace(' ', 'T');
     return new Date(isoString);
   }, []);
 
-  /** Calculate remaining seconds from expiry time */
   const calculateRemainingSeconds = useCallback((expiryTime: Date | null): number => {
     if (!expiryTime) return 0;
-
     const now = new Date();
     const expiry = new Date(expiryTime);
     const diff = expiry.getTime() - now.getTime();
-
-    const seconds = Math.max(0, Math.ceil(diff / 1000));
-    return seconds;
+    return Math.max(0, Math.ceil(diff / 1000));
   }, []);
 
-  /** Fetch OTP session on mount */
   useEffect(() => {
     const fetchOtpSession = async () => {
       try {
-        const res = await api.get<OtpSessionResponse>('/otp-session', {
-          params: { username }
-        });
+        const params: any = { username };
+        if (schoolCode) {
+          params.school_code = schoolCode;
+        }
+
+        const res = await api.get<OtpSessionResponse>('/otp-session', { params });
 
         if (res.data.success && res.data.data && res.data.data.has_otp) {
           const expiryString = res.data.data.otp_code_expired_at;
           const expiry = parseMySQLDateTime(expiryString);
           setOtpExpiryTime(expiry);
-
           const initialSeconds = calculateRemainingSeconds(expiry);
           const displaySeconds = initialSeconds >= 290 ? 300 : initialSeconds;
-
           if (displaySeconds <= 0) {
             setOtpExpired(true);
             setShowInvalidAccessDialog(true);
@@ -116,28 +105,23 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
       setOtpExpired(true);
       setShowInvalidAccessDialog(true);
     }
-  }, [username, parseMySQLDateTime, calculateRemainingSeconds]);
+  }, [username, schoolCode, parseMySQLDateTime, calculateRemainingSeconds]);
 
-  /** Start countdown timer when we have expiry time */
   useEffect(() => {
     if (!otpExpiryTime || otpExpired || remainingSeconds <= 0) {
-      const cleanup = () => {
-        if (countdownTimerRef.current) {
-          clearInterval(countdownTimerRef.current);
-          countdownTimerRef.current = null;
-        }
-      };
-      cleanup();
-      return cleanup;
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+      return;
     }
 
     if (countdownTimerRef.current) {
       clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
     }
 
-    countdownTimerRef.current = setInterval(() => {
-      setRemainingSeconds(prev => {
+    const timer = setInterval(() => {
+      setRemainingSeconds((prev) => {
         if (prev <= 1) {
           if (countdownTimerRef.current) {
             clearInterval(countdownTimerRef.current);
@@ -151,22 +135,25 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
       });
     }, 1000);
 
-    return () => {
+    countdownTimerRef.current = timer;
+  }, [otpExpiryTime, otpExpired, remainingSeconds]);
+
+  useEffect(
+    () => () => {
       if (countdownTimerRef.current) {
         clearInterval(countdownTimerRef.current);
         countdownTimerRef.current = null;
       }
-    };
-  }, [otpExpiryTime, otpExpired, remainingSeconds]);
+    },
+    []
+  );
 
-  /** Auto-focus first input */
   useEffect(() => {
     if (!otpExpired && !checkingSession) {
       inputRefs.current[0]?.focus();
     }
   }, [otpExpired, checkingSession]);
 
-  /** Countdown timer for resend */
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     if (resendCountdown > 0) {
@@ -175,13 +162,11 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
     return () => clearTimeout(timer);
   }, [resendCountdown]);
 
-  /** Format seconds to seconds-only display */
   const formatTime = useCallback((seconds: number) => {
     if (seconds <= 0) return 'Expired';
     return `${seconds} seconds`;
   }, []);
 
-  /** Validate OTP */
   const validateOtp = useCallback(() => {
     const code = otp.join('');
     if (code.length !== 6) {
@@ -192,28 +177,31 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
     return true;
   }, [otp]);
 
-  /** Input change */
-  const handleChange = useCallback((value: string, index: number) => {
-    if (otpExpired) return;
-    if (!/^[0-9]?$/.test(value)) return;
+  const handleChange = useCallback(
+    (value: string, index: number) => {
+      if (otpExpired) return;
+      if (!/^[0-9]?$/.test(value)) return;
 
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
+      const newOtp = [...otp];
+      newOtp[index] = value;
+      setOtp(newOtp);
 
-    if (error) setError('');
-    if (value && index < 5) inputRefs.current[index + 1]?.focus();
-  }, [otp, otpExpired, error]);
+      if (error) setError('');
+      if (value && index < 5) inputRefs.current[index + 1]?.focus();
+    },
+    [otp, otpExpired, error]
+  );
 
-  /** Key down handler */
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (otpExpired) return;
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  }, [otp, otpExpired]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+      if (otpExpired) return;
+      if (e.key === 'Backspace' && !otp[index] && index > 0) {
+        inputRefs.current[index - 1]?.focus();
+      }
+    },
+    [otp, otpExpired]
+  );
 
-  /** Clear OTP fields and focus first input */
   const clearOtpFields = useCallback(() => {
     setOtp(Array(6).fill(''));
     setTimeout(() => {
@@ -221,7 +209,6 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
     }, 10);
   }, []);
 
-  /** ✅ FIXED: Handle Verify */
   const handleVerify = useCallback(async () => {
     if (otpExpired) return;
     setTouched(true);
@@ -229,51 +216,51 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
 
     setLoading(true);
     try {
-      const response = await api.post('/verify-otp', {
+      const requestBody: any = {
         otp_code: otp.join(''),
-        username
-      }, {
-        skipAuthInterceptor: true
-      } as any) as { data: OtpResponse };
+        username,
+      };
+      if (schoolCode) {
+        requestBody.school_code = schoolCode;
+      }
+
+      const response = (await api.post('/verify-otp', requestBody, {
+        skipAuthInterceptor: true,
+      } as any)) as { data: OtpResponse };
 
       const res = response.data;
 
       if (res.success) {
-        // ✅ Get the token AND expiry from response
         const firstUserToken = res.data?.first_user_token;
         const firstUserTokenExpiryAt = res.data?.first_user_token_expiry_at;
-        const passwordResetToken = res.data?.reset_token; // ✅ Use reset_token from response
-        
+        const passwordResetToken = res.data?.reset_token;
+
         if (firstUserToken) {
-          // First-user flow
-          setSuccessDialogMessage(`OTP verification was successful! You can now proceed with registration.`);
-          
-          // ✅ Store token in localStorage immediately
+          setSuccessDialogMessage(
+            `OTP verification was successful! You can now proceed with registration.`
+          );
           localStorage.setItem('first_user_token', firstUserToken);
-          
-          // ✅ Call the callback WITH BOTH token and expiry
           if (onOtpVerified) {
             onOtpVerified(firstUserToken, firstUserTokenExpiryAt);
           }
         } else if (passwordResetToken) {
-          // Password reset flow
           setResetToken(passwordResetToken);
-          setSuccessDialogMessage(`OTP verification was successful! You can now reset your password.`);
-          
+          setSuccessDialogMessage(
+            `OTP verification was successful! You can now reset your password.`
+          );
           if (onOtpVerified) {
-            onOtpVerified(); // Just callback without token
+            onOtpVerified();
           }
         }
-        
+
         setShowSuccessDialog(true);
       } else {
         setError(res.message ?? 'Verification failed.');
         clearOtpFields();
       }
     } catch (err: any) {
-      let errorMessage = err?.response?.data?.message ||
-        err?.message ||
-        'Verification failed. Please try again.';
+      let errorMessage =
+        err?.response?.data?.message || err?.message || 'Verification failed. Please try again.';
 
       if (err?.response?.status === 400) {
         errorMessage = 'Invalid OTP. Please try again.';
@@ -287,18 +274,19 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [otp, username, validateOtp, otpExpired, clearOtpFields, onOtpVerified]);
+  }, [otp, username, schoolCode, validateOtp, otpExpired, clearOtpFields, onOtpVerified]);
 
-  /** Press Enter to verify */
-  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (otpExpired) return;
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleVerify();
-    }
-  }, [otpExpired, handleVerify]);
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (otpExpired) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleVerify();
+      }
+    },
+    [otpExpired, handleVerify]
+  );
 
-  /** ✅ FIXED: Resend OTP */
   const handleResendOtp = useCallback(async () => {
     if (resendCountdown > 0 || otpExpired) return;
     setLoading(true);
@@ -306,20 +294,20 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
 
     try {
       let response;
+      const requestBody: any = { username };
+      if (schoolCode) {
+        requestBody.school_code = schoolCode;
+      }
 
       if (email) {
-        response = await api.post('/send-otp-first-user',
-          {
-            username,
-            email
-          },
-          { skipAuthInterceptor: true } as any
-        ) as { data: OtpResponse };
+        requestBody.email = email;
+        response = (await api.post('/send-otp-first-user', requestBody, {
+          skipAuthInterceptor: true,
+        } as any)) as { data: OtpResponse };
       } else {
-        response = await api.post('/resend-otp',
-          { username },
-          { skipAuthInterceptor: true } as any
-        ) as { data: OtpResponse };
+        response = (await api.post('/resend-otp', requestBody, {
+          skipAuthInterceptor: true,
+        } as any)) as { data: OtpResponse };
       }
 
       const res = response.data;
@@ -329,10 +317,14 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
         setResendCountdown(30);
         setOtpExpired(false);
 
-        const sessionResponse = await api.get('/otp-session',
-          { params: { username } }
-        ) as { data: OtpSessionResponse };
+        const sessionParams: any = { username };
+        if (schoolCode) {
+          sessionParams.school_code = schoolCode;
+        }
 
+        const sessionResponse = (await api.get('/otp-session', { params: sessionParams })) as {
+          data: OtpSessionResponse;
+        };
         const session = sessionResponse.data;
 
         if (session.success && session.data?.otp_code_expired_at) {
@@ -348,11 +340,15 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
         setError(res.message ?? 'Failed to resend OTP.');
       }
     } catch (err: any) {
-      let errorMessage = err?.response?.data?.message ||
-        err?.message ||
-        'Failed to resend OTP. Please try again.';
+      let errorMessage =
+        err?.response?.data?.message || err?.message || 'Failed to resend OTP. Please try again.';
 
-      if (email && (err?.response?.status === 422 || errorMessage.includes('email') || errorMessage.includes('Email'))) {
+      if (
+        email &&
+        (err?.response?.status === 422 ||
+          errorMessage.includes('email') ||
+          errorMessage.includes('Email'))
+      ) {
         errorMessage = 'Email verification failed. Please go back and re-enter your email.';
       }
 
@@ -360,9 +356,17 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [resendCountdown, username, email, otpExpired, clearOtpFields, parseMySQLDateTime, calculateRemainingSeconds]);
+  }, [
+    resendCountdown,
+    username,
+    email,
+    schoolCode,
+    otpExpired,
+    clearOtpFields,
+    parseMySQLDateTime,
+    calculateRemainingSeconds,
+  ]);
 
-  /** Dialog handlers */
   const handleSuccessClose = () => {
     if (redirectTimerRef.current) {
       clearTimeout(redirectTimerRef.current);
@@ -371,7 +375,9 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
     setShowSuccessDialog(false);
 
     if (resetToken && username) {
-      router.push(`/password-reset?token=${resetToken}&username=${encodeURIComponent(username)}&level=1`);
+      router.push(
+        `/password-reset?token=${resetToken}&username=${encodeURIComponent(username)}&level=1`
+      );
     } else if (onOtpVerified) {
       // First-user flow - callback already called
     } else {
@@ -384,28 +390,31 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
     router.push('/login');
   };
 
-  // Clean up timers on unmount
-  useEffect(() => () => {
-    if (redirectTimerRef.current) {
-      clearTimeout(redirectTimerRef.current);
-    }
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+    },
+    []
+  );
 
-  /** Show loader while checking session */
   if (checkingSession) {
     return (
-      <Box sx={{
-        position: 'fixed',
-        inset: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: '#f4f6f8'
-      }}>
+      <Box
+        sx={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: '#f4f6f8',
+        }}
+      >
         <Typography>Verifying...</Typography>
       </Box>
     );
@@ -426,7 +435,6 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
         overflow: 'hidden',
       }}
     >
-      {/* Scrollable container wrapper */}
       <Box
         sx={{
           width: '100%',
@@ -452,7 +460,6 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
             opacity: otpExpired ? 0.6 : 1,
           }}
         >
-          {/* Header - Logo Section */}
           <Box
             sx={{
               display: 'flex',
@@ -485,7 +492,6 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
             Enter the 6-digit OTP sent to your email.
           </Typography>
 
-          {/* OTP Inputs */}
           <Box
             sx={{
               display: 'flex',
@@ -524,7 +530,6 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
             ))}
           </Box>
 
-          {/* OTP Countdown Timer */}
           {!otpExpired && otpExpiryTime && remainingSeconds > 0 && (
             <Box
               sx={{
@@ -549,8 +554,12 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
                   sx={{
                     fontWeight: 700,
                     fontSize: { xs: '1rem', sm: '1.1rem' },
-                    color: remainingSeconds <= 0 ? 'error.main' :
-                      remainingSeconds < 60 ? 'warning.dark' : 'info.dark',
+                    color:
+                      remainingSeconds <= 0
+                        ? 'error.main'
+                        : remainingSeconds < 60
+                          ? 'warning.dark'
+                          : 'info.dark',
                   }}
                 >
                   {formatTime(remainingSeconds)}
@@ -610,13 +619,10 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
         </Box>
       </Box>
 
-      {/* Success Dialog */}
       <Dialog
         open={showSuccessDialog}
         onClose={(event, reason) => {
-          if (reason === 'backdropClick') {
-            return;
-          }
+          if (reason === 'backdropClick') return;
           handleSuccessClose();
         }}
         disableEscapeKeyDown
@@ -626,22 +632,24 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
             p: 3,
             width: 340,
             textAlign: 'center',
-            boxShadow: '0 8px 28px rgba(17, 24, 39, 0.12)'
-          }
+            boxShadow: '0 8px 28px rgba(17, 24, 39, 0.12)',
+          },
         }}
       >
         <Box sx={{ textAlign: 'center' }}>
-          <Box sx={{
-            width: 68,
-            height: 68,
-            borderRadius: '50%',
-            backgroundColor: 'success.light',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            mx: 'auto',
-            mb: 2
-          }}>
+          <Box
+            sx={{
+              width: 68,
+              height: 68,
+              borderRadius: '50%',
+              backgroundColor: 'success.light',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mx: 'auto',
+              mb: 2,
+            }}
+          >
             <svg
               width="34"
               height="34"
@@ -659,7 +667,10 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
             Success!
           </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3, whiteSpace: 'pre-line' }}>
+          <Typography
+            variant="body2"
+            sx={{ color: 'text.secondary', mb: 3, whiteSpace: 'pre-line' }}
+          >
             {successDialogMessage}
           </Typography>
 
@@ -674,13 +685,10 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
         </Box>
       </Dialog>
 
-      {/* Invalid Access Dialog */}
       <Dialog
         open={showInvalidAccessDialog}
         onClose={(event, reason) => {
-          if (reason === 'backdropClick') {
-            return;
-          }
+          if (reason === 'backdropClick') return;
           handleInvalidAccessClose();
         }}
         disableEscapeKeyDown
@@ -690,22 +698,24 @@ export function OtpView({ username, email, onOtpVerified }: OtpViewProps) {
             p: 3,
             width: 340,
             textAlign: 'center',
-            boxShadow: '0 8px 28px rgba(17, 24, 39, 0.12)'
-          }
+            boxShadow: '0 8px 28px rgba(17, 24, 39, 0.12)',
+          },
         }}
       >
         <Box sx={{ textAlign: 'center' }}>
-          <Box sx={{
-            width: 68,
-            height: 68,
-            borderRadius: '50%',
-            backgroundColor: 'error.light',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            mx: 'auto',
-            mb: 2
-          }}>
+          <Box
+            sx={{
+              width: 68,
+              height: 68,
+              borderRadius: '50%',
+              backgroundColor: 'error.light',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mx: 'auto',
+              mb: 2,
+            }}
+          >
             <svg
               width="34"
               height="34"

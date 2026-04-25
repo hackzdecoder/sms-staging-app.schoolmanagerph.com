@@ -166,9 +166,16 @@ export function FirstUserView() {
     setOtpSuccessMessage('');
 
     try {
+      // ✅ Get school_code from localStorage
+      const schoolCode = localStorage.getItem('user_school_code');
+
       const response = await api.post<OtpResponse>(
         '/send-otp-first-user',
-        { username: form.username, email: form.email },
+        {
+          username: form.username,
+          email: form.email,
+          school_code: schoolCode, // ✅ ADD school_code
+        },
         { skipAuthInterceptor: true } as any
       );
 
@@ -176,7 +183,7 @@ export function FirstUserView() {
         setOtpVerificationEmail(form.email);
         localStorage.setItem('first_user_email', form.email);
 
-        // ✅ FIXED: Use response.data.message from backend
+        // Use response.data.message from backend
         const successMessage = response.data.message;
         setOtpSuccessMessage(successMessage);
         setOtpSuccessDialog(true);
@@ -451,7 +458,12 @@ export function FirstUserView() {
   if (showOtpVerification) {
     return (
       <Box sx={{ position: 'fixed', inset: 0, bgcolor: '#f4f6f8' }}>
-        <OtpView username={form.username} email={form.email} onOtpVerified={handleOtpVerified} />
+        <OtpView
+          username={form.username}
+          email={form.email}
+          schoolCode={localStorage.getItem('user_school_code') || ''}
+          onOtpVerified={handleOtpVerified}
+        />
       </Box>
     );
   }
