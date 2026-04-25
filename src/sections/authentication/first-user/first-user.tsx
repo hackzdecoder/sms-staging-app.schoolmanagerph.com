@@ -523,7 +523,7 @@ export function FirstUserView() {
               fontSize: { xs: '1rem', sm: '1.1rem' },
             }}
           >
-            {otpVerified ? 'Set Up Your Account' : 'Verify Your Email'}
+            {otpVerified ? 'Terms and Policies' : 'Verify Your Email'}
           </Typography>
           <Typography
             variant="body2"
@@ -554,6 +554,7 @@ export function FirstUserView() {
               onChange={handleChange('email')}
               error={!!errors.email}
               helperText={errors.email}
+              disabled={otpVerified}
               size={isMobile ? 'small' : 'medium'}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.2 } }}
             />
