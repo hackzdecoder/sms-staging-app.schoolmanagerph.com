@@ -434,113 +434,113 @@ export default function App({ children }: AppProps) {
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // useEffect(() => {
-  //   // Clear any existing interval
-  //   if (intervalRef.current) {
-  //     clearInterval(intervalRef.current);
-  //     intervalRef.current = null;
-  //   }
+  useEffect(() => {
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
 
-  //   // Function that makes the API call AND HANDLES RESPONSE
-  //   const checkSession = async () => {
-  //     const token = localStorage.getItem('auth_token');
-  //     if (!token) return;
+    // Function that makes the API call AND HANDLES RESPONSE
+    const checkSession = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
 
-  //     try {
-  //       const response = await api.post<{ status: string }>('/auto-destroy-session', {});
+      try {
+        const response = await api.post<{ status: string }>('/auto-destroy-session', {});
 
-  //       if (response.data.status === 'Deactivated') {
-  //         // Stop the interval
-  //         if (intervalRef.current) {
-  //           clearInterval(intervalRef.current);
-  //           intervalRef.current = null;
-  //         }
+        if (response.data.status === 'Deactivated') {
+          // Stop the interval
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
 
-  //         // Show dialog
-  //         setDialogMessage('Your account has been deactivated');
-  //         setShowAccountDeactivatedDialog(true);
+          // Show dialog
+          setDialogMessage('Your account has been deactivated');
+          setShowAccountDeactivatedDialog(true);
 
-  //         // Clear storage immediately
-  //         localStorage.removeItem('auth_token');
-  //         localStorage.removeItem('auth_user');
-  //       }
-  //     } catch (error: any) {
-  //       if (error.response?.status === 401) {
-  //         // Stop the interval
-  //         if (intervalRef.current) {
-  //           clearInterval(intervalRef.current);
-  //           intervalRef.current = null;
-  //         }
+          // Clear storage immediately
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+        }
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          // Stop the interval
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
 
-  //         setShowSessionExpiredDialog(true);
-  //         localStorage.removeItem('auth_token');
-  //         localStorage.removeItem('auth_user');
-  //       }
-  //     }
-  //   };
+          setShowSessionExpiredDialog(true);
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+        }
+      }
+    };
 
-  //   // Start interval
-  //   intervalRef.current = setInterval(checkSession, 1500);
+    // Start interval
+    intervalRef.current = setInterval(checkSession, 1500);
 
-  //   // Make first request immediately
-  //   checkSession();
+    // Make first request immediately
+    checkSession();
 
-  //   return () => {
-  //     if (intervalRef.current) {
-  //       clearInterval(intervalRef.current);
-  //       intervalRef.current = null;
-  //     }
-  //   };
-  // }, []);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []);
 
-  // Also add a listener for when user logs in
-  // useEffect(() => {
-  //   const handleLogin = () => {
-  //     const token = localStorage.getItem('auth_token');
-  //     if (token && !intervalRef.current) {
-  //       const checkSession = async () => {
-  //         try {
-  //           const response = await api.post<{ status: string }>('/auto-destroy-session', {});
+  //Also add a listener for when user logs in
+  useEffect(() => {
+    const handleLogin = () => {
+      const token = localStorage.getItem('auth_token');
+      if (token && !intervalRef.current) {
+        const checkSession = async () => {
+          try {
+            const response = await api.post<{ status: string }>('/auto-destroy-session', {});
 
-  //           if (response.data.status === 'Deactivated') {
-  //             if (intervalRef.current) {
-  //               clearInterval(intervalRef.current);
-  //               intervalRef.current = null;
-  //             }
+            if (response.data.status === 'Deactivated') {
+              if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+              }
 
-  //             setDialogMessage('Your account has been deactivated');
-  //             setShowAccountDeactivatedDialog(true);
-  //             localStorage.removeItem('auth_token');
-  //             localStorage.removeItem('auth_user');
-  //           }
-  //         } catch (error: any) {
-  //           if (error.response?.status === 401) {
-  //             if (intervalRef.current) {
-  //               clearInterval(intervalRef.current);
-  //               intervalRef.current = null;
-  //             }
-  //             setShowSessionExpiredDialog(true);
-  //             localStorage.removeItem('auth_token');
-  //             localStorage.removeItem('auth_user');
-  //           }
-  //         }
-  //       };
+              setDialogMessage('Your account has been deactivated');
+              setShowAccountDeactivatedDialog(true);
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('auth_user');
+            }
+          } catch (error: any) {
+            if (error.response?.status === 401) {
+              if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+              }
+              setShowSessionExpiredDialog(true);
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('auth_user');
+            }
+          }
+        };
 
-  //       intervalRef.current = setInterval(checkSession, 1500);
-  //       checkSession();
-  //     }
-  //   };
+        intervalRef.current = setInterval(checkSession, 1500);
+        checkSession();
+      }
+    };
 
-  //   // Check immediately
-  //   handleLogin();
+    // Check immediately
+    handleLogin();
 
-  //   // Also listen for storage changes
-  //   window.addEventListener('storage', handleLogin);
+    // Also listen for storage changes
+    window.addEventListener('storage', handleLogin);
 
-  //   return () => {
-  //     window.removeEventListener('storage', handleLogin);
-  //   };
-  // }, []);
+    return () => {
+      window.removeEventListener('storage', handleLogin);
+    };
+  }, []);
 
   const closeAccountDeactivatedDialog = () => {
     setShowAccountDeactivatedDialog(false);

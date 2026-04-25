@@ -31,7 +31,7 @@ interface FirstUserApiResponse {
 interface OtpResponse {
   success: boolean;
   status?: number;
-  message?: string;
+  message: string;
   data?: {
     username?: string;
     email_hint?: string;
@@ -175,10 +175,10 @@ export function FirstUserView() {
       if (response.data.success) {
         setOtpVerificationEmail(form.email);
         localStorage.setItem('first_user_email', form.email);
-        const emailHint =
-          response.data.data?.email_hint ||
-          `${form.email.substring(0, 3)}****${form.email.substring(form.email.indexOf('@'))}`;
-        setOtpSuccessMessage(`Check ${emailHint} for the OTP.`);
+
+        // ✅ FIXED: Use response.data.message from backend
+        const successMessage = response.data.message;
+        setOtpSuccessMessage(successMessage);
         setOtpSuccessDialog(true);
       } else {
         setErrors({ email: response.data.message || 'Failed to send OTP' });
@@ -542,7 +542,6 @@ export function FirstUserView() {
               onChange={handleChange('email')}
               error={!!errors.email}
               helperText={errors.email}
-              disabled
               size={isMobile ? 'small' : 'medium'}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.2 } }}
             />

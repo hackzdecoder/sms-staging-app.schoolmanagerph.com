@@ -201,13 +201,13 @@ export function OverviewAnalyticsView() {
     fetchMessagesStats();
     fetchRecentMessages();
 
-    // const interval = setInterval(() => {
-    //   fetchAttendanceStats();
-    //   fetchMessagesStats();
-    //   fetchRecentMessages();
-    // }, 30000);
+    const interval = setInterval(() => {
+      fetchAttendanceStats();
+      fetchMessagesStats();
+      fetchRecentMessages();
+    }, 30000);
 
-    // return () => clearInterval(interval);
+    return () => clearInterval(interval);
   }, []);
 
   return (

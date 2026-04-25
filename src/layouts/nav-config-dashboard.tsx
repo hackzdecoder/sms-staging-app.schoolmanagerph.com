@@ -50,56 +50,56 @@ export const useNavData = (): NavItem[] => {
     navigate('/login', { replace: true });
   };
 
-  // const fetchUnreadCount = async () => {
-  //   try {
-  //     // Get current user from localStorage
-  //     const userStr = localStorage.getItem('user');
-  //     let userId = '';
+  const fetchUnreadCount = async () => {
+    try {
+      // Get current user from localStorage
+      const userStr = localStorage.getItem('user');
+      let userId = '';
 
-  //     if (userStr) {
-  //       const user = JSON.parse(userStr);
-  //       userId = user.user_id || '';
-  //     }
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        userId = user.user_id || '';
+      }
 
-  //     // Try the optimized unread-count endpoint first
-  //     try {
-  //       const response = await api.get<UnreadCountResponse>('/messages/unread-count', {
-  //         params: { user_id: userId },
-  //       });
+      // Try the optimized unread-count endpoint first
+      try {
+        const response = await api.get<UnreadCountResponse>('/messages/unread-count', {
+          params: { user_id: userId },
+        });
 
-  //       if (response.data.success && response.data.data) {
-  //         setUnreadCount(response.data.data.unread_count);
-  //         return; // Success, exit early
-  //       }
-  //     } catch (unreadCountError) {
-  //       console.log('Unread-count endpoint not available, falling back to messages endpoint');
-  //     }
+        if (response.data.success && response.data.data) {
+          setUnreadCount(response.data.data.unread_count);
+          return; // Success, exit early
+        }
+      } catch (unreadCountError) {
+        console.log('Unread-count endpoint not available, falling back to messages endpoint');
+      }
 
-  //     // Fallback: Since backend doesn't support status filter, we'll filter on frontend
-  //     const response = await api.get<ApiResponse<MessageRecord[]>>('/messages', {
-  //       params: { user_id: userId },
-  //     });
+      // Fallback: Since backend doesn't support status filter, we'll filter on frontend
+      const response = await api.get<ApiResponse<MessageRecord[]>>('/messages', {
+        params: { user_id: userId },
+      });
 
-  //     if (response.data.success && response.data.data) {
-  //       // Filter only unread messages on the frontend
-  //       const unreadMessages = response.data.data.filter(
-  //         (msg) => msg.status.toLowerCase() === 'unread'
-  //       );
-  //       setUnreadCount(unreadMessages.length);
-  //     } else {
-  //       setUnreadCount(0);
-  //     }
-  //   } catch (err) {
-  //     console.error('Failed to fetch unread count:', err);
-  //     setUnreadCount(0);
-  //   }
-  // };
+      if (response.data.success && response.data.data) {
+        // Filter only unread messages on the frontend
+        const unreadMessages = response.data.data.filter(
+          (msg) => msg.status.toLowerCase() === 'unread'
+        );
+        setUnreadCount(unreadMessages.length);
+      } else {
+        setUnreadCount(0);
+      }
+    } catch (err) {
+      console.error('Failed to fetch unread count:', err);
+      setUnreadCount(0);
+    }
+  };
 
-  // useEffect(() => {
-  //   fetchUnreadCount();
-  //   const interval = setInterval(fetchUnreadCount, 30000);
-  //   return () => clearInterval(interval);
-  // }, []);
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return useMemo(
     () => [
