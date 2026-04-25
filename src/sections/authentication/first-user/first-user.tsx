@@ -530,7 +530,7 @@ export function FirstUserView() {
             sx={{ textAlign: 'center', mb: { xs: 1, sm: 2.2 }, color: 'text.secondary' }}
           >
             {otpVerified
-              ? 'Please update your email to continue.'
+              ? 'Please read the terms and policies to continue'
               : 'Enter your email address to receive a verification code.'}
           </Typography>
 
